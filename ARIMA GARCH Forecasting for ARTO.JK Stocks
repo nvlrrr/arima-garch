@@ -1,0 +1,77 @@
+#LIBRARY YANG DIPERLUKAN
+library(tseries)
+library(forecast)
+library(stats)
+library(rugarch)
+library(fGarch)
+library(ggpubr)
+library(zoo)
+
+#ARIMA MODEL----------------------------------------------------------------------
+#MEMASUKKAN DATA
+data = read.delim('clipboard')
+attach(data)
+head(data)
+
+#MEMBUAT PLOT DATA
+plotawal = ts.plot(y = data$Close, col = "red", main = "Plot Data Saham ARTO.JK", ylab = 'Harga Saham')
+
+#UJI STASIONER ADF DATA ASLI
+adf.test(data$Close) #p-value > alpha, belum stasioner
+
+#TRANSFORMASI
+dtrans1 = as.matrix(diff(log(data$Close), differences = 1))
+dtrans2 = as.matrix(diff(log(data$Close), differences = 2))
+head(dtrans1)
+head(dtrans2)
+
+#UJI STATIONER ADF DATA TRANSFORMASI
+adf.test(dtrans1)
+adf.test(dtrans2)
+
+#MENAMPILKAN PLOT DATA TRANSFORMASI
+par(mfrow = c(1,1))
+plot_d1 = plot.zoo(dtrans1, col = "blue", main = "Plot Data DTRANS1")
+plot_d2 = plot.zoo(dtrans2, col = "blue", main = "Plot Data DTRANS2")
+
+#IDENTIFIKASI MODEL ARIMA
+par(mfrow = c(2,1))
+acf(dtrans2)
+pacf(dtrans2)
+
+#ARIMA TERBAIK
+#Orde d di auto.arima(data, d = ...) disesuaikan dengan orde transformasi
+arima_terbaik = auto.arima(data$Close, d = 2, seasonal = F, stepwise = F, approximation = F, max.order = 2) #d adalah orde differencing terbaik
+summary(arima_terbaik)
+
+#DIAGNOSTIC CHECKING
+tsdiag(arima_terbaik)
+residual = arima_terbaik$residuals #menghitung residual
+#Uji Normalitas Residual
+jarque.bera.test(residual)
+#No Autokorelasi
+par(mfrow = c(2,1))
+acf(residual)
+pacf(residual)
+#Homoskesdastisitas
+acf(residual^2)
+pacf(residual^2)
+
+#FORECAST DENGAN METODE ARIMA
+forecast_arima = forecast(arima_terbaik)				
+forecast_arima
+par(mfrow = c(1,1))
+plot(forecast_arima)
+
+
+
+
+#ARIMA(0,2,1)-GARCH MODEL--------------------------------------------------------------------
+garch_spec = ugarchspec(mean.model = list(arima(data$Close, order = c(0,2,1))),
+                        variance.model = list(model="sGARCH"), distribution.model="norm")
+garch_fit = ugarchfit(spec = garch_spec, data = data$Close, solver = 'hybrid')
+garch_fit
+coef(garch_fit)
+
+FCAST = ugarchforecast(garch_fit, data = data$Close, n.ahead = 10)
+FCAST
